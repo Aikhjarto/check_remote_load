@@ -1,0 +1,119 @@
+#!/bin/bash
+
+#Copyright (C) 2019 Thomas Wagner wagner-thomas@gmx.at
+#
+#This program is free software; you can redistribute it and/or
+#modify it under the terms of the GNU General Public License
+#as published by the Free Software Foundation; either version 2
+#of the License, or (at your option) any later version.
+#
+#This program is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#
+#You should have received a copy of the GNU General Public License
+#along with this program; if not, write to the Free Software
+#Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+#set -x 
+set -e
+#set -o xtrace
+usage()
+{
+cat << EOF
+This script checks /proc/loadavg via ssh.
+OPTIONS:
+ -h     Show this message
+ -u     Username to use for ssh
+ -H     IPMI address or hostname
+ -w WLOAD1,WLOAD5,WLOAD15
+    Exit with WARNING status if load average exceeds WLOADn
+ -c CLOAD1,CLOAD5,CLOAD15
+    Exit with CRITICAL status if load average exceed CLOADn
+    the load average format is the same used by "uptime" and "w"
+
+EOF
+}
+
+# NAGIOS' wanted return values
+NAG_OK=0
+NAG_WARN=1
+NAG_CRIT=2
+NAG_UNKNOWN=3
+
+
+# default values
+HOST=localhost
+USERNAME=root
+warning="1.0,0.8,0.75"
+critical="2.0,2.0,1.1"
+
+while getopts ":u:H:w:c:" options
+do
+    case $options in
+	u ) USERNAME=$OPTARG ;;
+	H ) HOST=$OPTARG ;;
+        w ) warning=$OPTARG ;;
+        c ) critical=$OPTARG ;;
+        * ) usage
+            exit $NAG_UNKNOWN ;;
+    esac
+done
+
+# debug output in put argutements
+# echo $HOST $warning $critical $LOADAVG
+
+# assemble SSH connection 
+if [ -z "${USERNAME}" ]; then
+	SSH_CONNECT=${HOST}
+else
+	SSH_CONNECT=${USERNAME}"@"${HOST}
+fi
+
+# get /proc/loadavg from remote HOST
+# -q to ignore greeting message
+LOADAVG=$(ssh -q ${SSH_CONNECT} 'cat /proc/loadavg')
+RC=$?
+if [ "${RC}" -ne 0 ]; then
+	echo "UNKNOWN - SSH returned $RC, check log for error"
+	exit $NAG_UNKNOWN
+fi
+
+# debug output SSH result
+#echo $LOADAVG
+
+# split strings to arrays for 1m, 5m and 15m load average
+WARN_ARR=(${warning//,/ })
+CRIT_ARR=(${critical//,/ })
+LOAD_ARR=(${LOADAVG// / })
+NAME_ARR=(1 5 15)
+
+CRIT=0
+WARN=0
+PERF_STR=" |"
+for i in 0 1 2 ; 
+do
+	if (( $(echo "${LOAD_ARR[i]} > ${WARN_ARR[i]}" | bc -l) )) ; then
+		WARN=1
+	fi
+	
+	if (( $(echo "${LOAD_ARR[i]} > ${CRIT_ARR[i]}" | bc -l) )) ; then
+		CRIT=1
+	fi
+
+	PERF_STR=${PERF_STR}" load"${NAME_ARR[i]}"="${LOAD_ARR[i]}";"${WARN_ARR[i]}";"${CRIT_ARR[i]}";0;"
+done
+
+# produce output according to nagios' plugin spec
+SUFFIX="/proc/loadavg: ${LOADAVG}${PERF_STR}"
+if [ ${CRIT} -gt 0 ]; then
+	echo "CRITICAL - "${SUFFIX}
+	exit $NAG_CRIT
+elif [ ${WARN} -gt 0 ]; then
+	echo "WARNING - "${SUFFIX}
+	exit $NAG_WARN
+else
+	echo "OK - ${SUFFIX}"
+	exit $NAG_OK
+fi
