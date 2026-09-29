@@ -61,6 +61,15 @@ do
     esac
 done
 
+# a malformed threshold is a wrong command line, so UNKNOWN; bc would silently
+# take a non-number as 0
+for thresholds in "${warning}" "${critical}"; do
+	if ! [[ "${thresholds}" =~ ^[0-9]+(\.[0-9]+)?,[0-9]+(\.[0-9]+)?,[0-9]+(\.[0-9]+)?$ ]]; then
+		echo "UNKNOWN - -w and -c take three load averages LOAD1,LOAD5,LOAD15, not '${thresholds}'"
+		exit $NAG_UNKNOWN
+	fi
+done
+
 # debug output in put argutements
 # echo $HOST $warning $critical $LOADAVG
 
