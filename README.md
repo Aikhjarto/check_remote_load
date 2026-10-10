@@ -16,3 +16,21 @@ check_remote_load -H server.example.com -u monitor -w 1.0,0.8,0.75 -c 2.0,2.0,1.
 
 The monitoring user needs key based ssh access to the remote machine; `bc` is
 used for the comparison.
+
+## Bash completion
+
+`completions/check_remote_load` completes the options, host names for `-H`
+and user names for `-u`, also when the plugin is called by its full path.
+The packages install it; otherwise copy it to bash-completion's directory:
+
+```sh
+install -D -m 0644 completions/check_remote_load /usr/share/bash-completion/completions/check_remote_load
+```
+
+## Tests
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+tests the bash completion.

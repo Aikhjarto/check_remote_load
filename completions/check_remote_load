@@ -1,0 +1,25 @@
+# bash completion for check_remote_load                      -*- shell-script -*-
+
+_check_remote_load()
+{
+    local cur=${COMP_WORDS[COMP_CWORD]} prev=${COMP_WORDS[COMP_CWORD-1]}
+    COMPREPLY=()
+
+    case $prev in
+        -H)
+            mapfile -t COMPREPLY < <(compgen -A hostname -- "$cur")
+            return
+            ;;
+        -u)
+            mapfile -t COMPREPLY < <(compgen -u -- "$cur")
+            return
+            ;;
+        -w | -c)
+            return
+            ;;
+    esac
+
+    # no positional arguments: offer the options
+    mapfile -t COMPREPLY < <(compgen -W '-h -u -H -w -c' -- "$cur")
+}
+complete -F _check_remote_load check_remote_load
